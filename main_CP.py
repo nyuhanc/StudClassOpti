@@ -43,11 +43,8 @@ if len(data) > 84:
 # Convert student names to strings
 data['Student'] = data['Student'].astype(int)
 
-
 # # Save the corrected data to a new Excel file
 # data.to_excel(filename + appendix, index=False)
-
-
 
 # --- END OF CORRECTIONS ---
 
