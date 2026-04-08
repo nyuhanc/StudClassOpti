@@ -1,0 +1,23 @@
+Objective function parameters:
+lang_importance = 1
+lang_penalty = 10
+nat_sci_1_importance = 100
+nat_sci_2_importance = 1
+nat_sci_penalty = 10000
+stratification = 2
+
+Constraints:
+1. 1. Maximally max_class_size students can be assigned to each class
+2. 2. Maximally 2 * max_class_size students can have the same language
+3. 3. Maximally 3 * max_class_size students can have the same natural science classes
+4. 4. Natural classes 1 and 2 of the same student must be different
+5. 5. Students that want to be in the same class must be in the same class
+6. 6. Every student in class 1 is assigned to natural science classes that are the most preferred by the students
+7. 8. All male students must be in the same class
+8. 9. All student who chose language 4 as their first priority must be assigned to language 4
+9. 10. Students having language 5 must be assigned to class 2
+
+Other information:
+Max class size: 29
+Number of classes: 3
+Best match pair of natural science classes: Biology and Chemistry
