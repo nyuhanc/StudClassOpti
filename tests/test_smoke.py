@@ -22,6 +22,7 @@ from studclassopti.core import (
     best_nat_sci_pair,
     solve,
 )
+from studclassopti.core.constraints.registry import REGISTRY, enabled_constraints
 
 EXCEL = os.path.join(os.path.dirname(__file__), "..", "students_list_2025.xlsx")
 
@@ -68,6 +69,28 @@ def test_best_pair_is_a_valid_pair(data):
     assert count >= 0
 
 
+def test_registry_toggle_controls_enabled_set():
+    """enabled_constraints() honours the per-constraint flags."""
+    config = SolverConfig()
+
+    # The redundant science-capacity constraint (c03) ships off by default.
+    enabled_ids = {c.id for c in enabled_constraints(config)}
+    assert "c03" not in enabled_ids
+    # ...and the rest of the default-on constraints are present.
+    assert {"c01", "c02", "c04", "c13"} <= enabled_ids
+
+    # Flipping a flag adds/removes exactly that constraint.
+    config.constraints.nat_sci_capacity_enabled = True
+    assert "c03" in {c.id for c in enabled_constraints(config)}
+
+    config.constraints.subject_pairing_enabled = False
+    assert "c13" not in {c.id for c in enabled_constraints(config)}
+
+    # Every registered constraint maps to a real flag on the config.
+    for c in REGISTRY:
+        assert hasattr(config.constraints, c.enabled_field)
+
+
 def test_solve_quick_feasible_and_constraints_hold(data):
     """A fast 1-shuffle, short-time-limit run that still respects constraints."""
     config = SolverConfig()
@@ -84,13 +107,34 @@ def test_solve_quick_feasible_and_constraints_hold(data):
     # Constraint 1: class sizes within limit.
     assert (out["Class"].value_counts() <= config.max_class_size).all()
 
+    # Constraint 2: at most (multiplier * max_class_size) students per language.
+    lang_cap = config.constraints.lang_capacity_multiplier * config.max_class_size
+    assert (out["Language"].value_counts() <= lang_cap).all()
+
     # Constraint 4: the two sciences differ for every student.
     assert (out["NatSci1"] != out["NatSci2"]).all()
 
-    # Constraint 13: anyone with Physics has Biology in the other slot.
-    phys = out[(out["NatSci1"] == "Physics") | (out["NatSci2"] == "Physics")]
-    assert ((phys["NatSci1"] == "Biology") | (phys["NatSci2"] == "Biology")).all()
+    takes_physics = (out["NatSci1"] == "Physics") | (out["NatSci2"] == "Physics")
 
     # Constraint 10: at most max_class_size students take Physics.
-    takes_physics = ((out["NatSci1"] == "Physics") | (out["NatSci2"] == "Physics")).sum()
-    assert takes_physics <= config.max_class_size
+    assert takes_physics.sum() <= config.max_class_size
+
+    # Constraint 11: students ranking Physics 1st or 2nd must receive it.
+    wants_physics = out["Physics"].isin([1, 2])
+    assert takes_physics[wants_physics].all()
+
+    # Constraint 12: students ranking Physics last (3rd) must not receive it.
+    rejects_physics = out["Physics"] == 3
+    assert (~takes_physics[rejects_physics]).all()
+
+    # Constraint 13: anyone with Physics has Biology in the other slot.
+    phys = out[takes_physics]
+    assert ((phys["NatSci1"] == "Biology") | (phys["NatSci2"] == "Biology")).all()
+
+    # Constraint 9: students whose top language is Russian get Russian.
+    top_russian = out["Russian"] == 1
+    assert (out.loc[top_russian, "Language"] == "Russian").all()
+
+    # Constraint 14: students whose top language is Spanish never get Italian.
+    top_spanish = out["Spanish"] == 1
+    assert (out.loc[top_spanish, "Language"] != "Italian").all()

@@ -57,7 +57,12 @@ class ConstraintsConfig:
     lang_capacity_multiplier: int = 1
 
     # 3. Max student-slots per science subject (multiplier * max_class_size).
-    nat_sci_capacity_enabled: bool = True
+    #    Off by default: with constraint 4 (distinct sciences) each science fills
+    #    at most one slot per student, so slots-per-science <= num students <=
+    #    num_of_classes * max_class_size, which equals the cap at multiplier 3 --
+    #    redundant for the default dimensions. Kept as a toggle for setups
+    #    (smaller classes / more students) where it can actually bind.
+    nat_sci_capacity_enabled: bool = False
     nat_sci_capacity_multiplier: int = 3
 
     # 4. A student's two science subjects must differ.
