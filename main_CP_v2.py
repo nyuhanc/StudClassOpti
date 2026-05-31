@@ -164,22 +164,23 @@ for shuffle_idx in range(shuffles):
             students_with_lang_i.append(has_lang_i)
         model.Add(sum(students_with_lang_i) <= 1 * max_class_size)
 
-    cons_names.append('3. Maximally 3 * max_class_size students can have the same natural science classes')
-    for i in range(1, 4):
-        students_with_nat_sci = []
-        for student in students:
-            has_nat_sci_1 = model.NewBoolVar(f'{student}_has_nat_sci_1_{i}')
-            model.Add(var_dict[str(student) + '_nat_sci_1'] == i).OnlyEnforceIf(has_nat_sci_1)
-            model.Add(var_dict[str(student) + '_nat_sci_1'] != i).OnlyEnforceIf(has_nat_sci_1.Not())
-
-            has_nat_sci_2 = model.NewBoolVar(f'{student}_has_nat_sci_2_{i}')
-            model.Add(var_dict[str(student) + '_nat_sci_2'] == i).OnlyEnforceIf(has_nat_sci_2)
-            model.Add(var_dict[str(student) + '_nat_sci_2'] != i).OnlyEnforceIf(has_nat_sci_2.Not())
-
-            students_with_nat_sci.append(has_nat_sci_1)
-            students_with_nat_sci.append(has_nat_sci_2)
-
-        model.Add(sum(students_with_nat_sci) <= max_class_size * 3)
+    # REDUNDANT
+    # cons_names.append('3. Maximally 3 * max_class_size students can have the same natural science classes')
+    # for i in range(1, 4):
+    #     students_with_nat_sci = []
+    #     for student in students:
+    #         has_nat_sci_1 = model.NewBoolVar(f'{student}_has_nat_sci_1_{i}')
+    #         model.Add(var_dict[str(student) + '_nat_sci_1'] == i).OnlyEnforceIf(has_nat_sci_1)
+    #         model.Add(var_dict[str(student) + '_nat_sci_1'] != i).OnlyEnforceIf(has_nat_sci_1.Not())
+    #
+    #         has_nat_sci_2 = model.NewBoolVar(f'{student}_has_nat_sci_2_{i}')
+    #         model.Add(var_dict[str(student) + '_nat_sci_2'] == i).OnlyEnforceIf(has_nat_sci_2)
+    #         model.Add(var_dict[str(student) + '_nat_sci_2'] != i).OnlyEnforceIf(has_nat_sci_2.Not())
+    #
+    #         students_with_nat_sci.append(has_nat_sci_1)
+    #         students_with_nat_sci.append(has_nat_sci_2)
+    #
+    #     model.Add(sum(students_with_nat_sci) <= max_class_size * 3)
 
     cons_names.append('4. Natural classes 1 and 2 of the same student must be different')
     for student in students:
