@@ -1,0 +1,7 @@
+# Pinned to the versions currently installed in this project's environment.
+ortools==9.10.4067
+pandas==2.2.2
+openpyxl==3.1.2
+
+# GUI (Phase 3).
+PySide6==6.8.1

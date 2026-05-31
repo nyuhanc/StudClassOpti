@@ -1,0 +1,9 @@
+Objective function parameters:
+lang_importance = 1
+lang_penalty = 10
+nat_sci_1_importance = 1
+nat_sci_2_importance = 1
+nat_sci_penalty = 100
+stratification = 4
+
+Constraints:
