@@ -12,9 +12,12 @@ value (``best_pair``) isn't a scalar ``Parameter`` but an optional subject pair.
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFormLayout,
     QGroupBox,
+    QHBoxLayout,
+    QLabel,
     QLineEdit,
     QSpinBox,
     QVBoxLayout,
@@ -25,7 +28,8 @@ from studclassopti.core import SolverConfig
 from studclassopti.core.constraints.base import Constraint, Parameter
 from studclassopti.core.constraints.registry import REGISTRY
 
-AUTO_PAIR = "Auto (most popular)"
+from . import i18n
+from .widgets import info_toggle
 
 
 def _science_pairs(config: SolverConfig) -> list[tuple[str, str]]:
@@ -37,34 +41,68 @@ class ConstraintPanel(QWidget):
     def __init__(self, config: SolverConfig):
         super().__init__()
         self._config = config  # source of option lists (languages / sciences)
-        self._boxes: list[tuple[Constraint, QGroupBox]] = []
+        self._checks: list[tuple[Constraint, QCheckBox]] = []
         self._params: dict[tuple[str, str], QWidget] = {}
         self._best_pair: QComboBox | None = None
 
         layout = QVBoxLayout(self)
+        starred = False
         for constraint in REGISTRY:
+            if constraint.id in i18n.HIDDEN_CONSTRAINTS:
+                continue
             layout.addWidget(self._build_group(constraint))
+            starred = starred or constraint.id in i18n.SINGLE_CHOICE_CONSTRAINTS
+
+        if starred:  # explain the red "*" once, at the bottom
+            footnote = QLabel(i18n.SINGLE_CHOICE_FOOTNOTE)
+            footnote.setWordWrap(True)
+            footnote.setStyleSheet("color: #666;")
+            layout.addWidget(footnote)
         layout.addStretch(1)
 
     def _build_group(self, c: Constraint) -> QGroupBox:
-        box = QGroupBox(c.label)
-        box.setCheckable(True)  # the checkbox is the constraint's enable flag
-        box.setToolTip(c.description)
-        form = QFormLayout(box)
+        box = QGroupBox()
+        outer = QVBoxLayout(box)
 
+        # Header: enable checkbox (the label) + an info button, both always
+        # enabled so the description can be read before turning the rule on.
+        check = QCheckBox(i18n.constraint_label(c.id))
+        check.setStyleSheet("font-weight: bold;")
+        description = i18n.constraint_description(c.id)
+        if c.id in i18n.SINGLE_CHOICE_CONSTRAINTS:
+            description += i18n.SINGLE_CHOICE_MARK
+        info, desc = info_toggle(description)
+        header = QHBoxLayout()
+        header.addWidget(check)
+        header.addStretch(1)
+        header.addWidget(info)
+        outer.addLayout(header)
+
+        # Collapsible description (hidden until the info button is toggled).
+        outer.addWidget(desc)
+
+        # Parameters live in their own widget so they grey out when the rule is
+        # off, without disabling the header (checkbox + info).
+        params = QWidget()
+        form = QFormLayout(params)
+        form.setContentsMargins(0, 0, 0, 0)
         for p in c.parameters:
             widget = self._build_param_widget(p)
             self._params[(c.id, p.key)] = widget
-            form.addRow(p.label, widget)
+            form.addRow(i18n.param_label(c.id, p.key, p.label), widget)
 
         if c.id == "c06":
             self._best_pair = QComboBox()
-            self._best_pair.addItem(AUTO_PAIR)
+            self._best_pair.addItem(i18n.AUTO_PAIR, None)
             for a, b in _science_pairs(self._config):
-                self._best_pair.addItem(f"{a} + {b}")
-            form.addRow("Science pair", self._best_pair)
+                self._best_pair.addItem(f"{i18n.subject_to_sl(a)} + {i18n.subject_to_sl(b)}", (a, b))
+            form.addRow(i18n.SCIENCE_PAIR, self._best_pair)
 
-        self._boxes.append((c, box))
+        outer.addWidget(params)
+        check.toggled.connect(params.setEnabled)
+        params.setEnabled(check.isChecked())
+
+        self._checks.append((c, check))
         return box
 
     def _build_param_widget(self, p: Parameter) -> QWidget:
@@ -75,44 +113,49 @@ class ConstraintPanel(QWidget):
             return w
         if p.kind == "choice":
             w = QComboBox()
-            w.addItems(getattr(self._config, p.choices_from))
+            for opt in getattr(self._config, p.choices_from):
+                w.addItem(i18n.subject_to_sl(opt), opt)  # show Slovene, store English
             return w
         return QLineEdit()  # "str"
 
     # ---- config <-> widgets ----
     def load_from(self, config: SolverConfig) -> None:
         cons = config.constraints
-        for c, box in self._boxes:
-            box.setChecked(getattr(cons, c.enabled_field))
+        for c, check in self._checks:
+            check.setChecked(getattr(cons, c.enabled_field))
             for p in c.parameters:
-                self._set_widget(self._params[(c.id, p.key)], getattr(cons, p.key))
+                value = getattr(cons, p.key)
+                if (c.id, p.key) == ("c05", "schoolmate_column"):
+                    value = i18n.col_to_sl(value)  # show the Slovene column name
+                self._set_widget(self._params[(c.id, p.key)], value)
 
         if self._best_pair is not None:
             if cons.best_pair is None:
                 self._best_pair.setCurrentIndex(0)
             else:
-                self._best_pair.setCurrentText(f"{cons.best_pair[0]} + {cons.best_pair[1]}")
+                idx = self._best_pair.findData(tuple(cons.best_pair))
+                self._best_pair.setCurrentIndex(idx if idx >= 0 else 0)
 
     def apply_to(self, config: SolverConfig) -> None:
         cons = config.constraints
-        for c, box in self._boxes:
-            setattr(cons, c.enabled_field, box.isChecked())
+        for c, check in self._checks:
+            setattr(cons, c.enabled_field, check.isChecked())
             for p in c.parameters:
-                setattr(cons, p.key, self._read_widget(self._params[(c.id, p.key)]))
+                value = self._read_widget(self._params[(c.id, p.key)])
+                if (c.id, p.key) == ("c05", "schoolmate_column"):
+                    value = i18n.col_to_en(value)  # store the internal English name
+                setattr(cons, p.key, value)
 
         if self._best_pair is not None:
-            if self._best_pair.currentIndex() == 0:
-                cons.best_pair = None
-            else:
-                a, b = self._best_pair.currentText().split(" + ")
-                cons.best_pair = (a, b)
+            cons.best_pair = self._best_pair.currentData()  # None or (a, b)
 
     @staticmethod
     def _set_widget(w: QWidget, value) -> None:
         if isinstance(w, QSpinBox):
             w.setValue(int(value))
         elif isinstance(w, QComboBox):
-            w.setCurrentText(str(value))
+            idx = w.findData(value)  # match the English value stored as item data
+            w.setCurrentIndex(idx if idx >= 0 else 0)
         else:
             w.setText(str(value))
 
@@ -121,5 +164,5 @@ class ConstraintPanel(QWidget):
         if isinstance(w, QSpinBox):
             return w.value()
         if isinstance(w, QComboBox):
-            return w.currentText()
+            return w.currentData()
         return w.text()

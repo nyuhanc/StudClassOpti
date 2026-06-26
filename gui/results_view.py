@@ -24,6 +24,8 @@ from PySide6.QtWidgets import (
 from studclassopti.core import SolverConfig
 from studclassopti.core.solver import SolverResult
 
+from . import i18n
+
 SORT_COLS = ["Class", "Language", "NatSci1", "NatSci2"]
 
 
@@ -35,7 +37,7 @@ class ResultsView(QWidget):
         self._base_name = "students"
 
         layout = QVBoxLayout(self)
-        self.summary = QLabel("No results yet. Load a file and run.")
+        self.summary = QLabel(i18n.NO_RESULTS)
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
 
@@ -43,7 +45,7 @@ class ResultsView(QWidget):
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         layout.addWidget(self.table, 1)
 
-        self.export_btn = QPushButton("Export to Excel…")
+        self.export_btn = QPushButton(i18n.EXPORT_BTN)
         self.export_btn.setEnabled(False)
         self.export_btn.clicked.connect(self._export)
         layout.addWidget(self.export_btn)
@@ -54,7 +56,7 @@ class ResultsView(QWidget):
         self._base_name = base_name
 
         if not result.found:
-            self.summary.setText("No feasible solution found in any shuffle.")
+            self.summary.setText(i18n.NO_FEASIBLE)
             self.table.clear()
             self.table.setRowCount(0)
             self.export_btn.setEnabled(False)
@@ -62,13 +64,12 @@ class ResultsView(QWidget):
 
         df = result.best_data.sort_values(by=SORT_COLS).reset_index(drop=True)
         sizes = df["Class"].value_counts().sort_index()
-        sizes_txt = ", ".join(f"class {c}: {n}" for c, n in sizes.items())
-        cancelled = " (cancelled early)" if result.cancelled else ""
+        sizes_txt = ", ".join(f"razred {c}: {n}" for c, n in sizes.items())
+        cancelled = i18n.CANCELLED_EARLY if result.cancelled else ""
         self.summary.setText(
-            f"Best score: {result.best_score:.0f}{cancelled}  |  "
-            f"pair: {result.best_pair[0]} + {result.best_pair[1]}  |  {sizes_txt}"
+            i18n.summary_text(result.best_score, cancelled, result.best_pair, sizes_txt)
         )
-        self._fill_table(df)
+        self._fill_table(i18n.localize_result_df(df))
         self.export_btn.setEnabled(True)
 
     def _fill_table(self, df: pd.DataFrame) -> None:
@@ -84,36 +85,40 @@ class ResultsView(QWidget):
     def _export(self) -> None:
         if self._result is None or not self._result.found:
             return
-        default = f"{self._base_name}_results.xlsx"
-        path, _ = QFileDialog.getSaveFileName(self, "Export results", default, "Excel (*.xlsx)")
+        default = f"{self._base_name}_rezultati.xlsx"
+        path, _ = QFileDialog.getSaveFileName(self, i18n.EXPORT_TITLE, default, "Excel (*.xlsx)")
         if not path:
             return
         df = self._result.best_data.sort_values(by=SORT_COLS).reset_index(drop=True)
         try:
-            df.to_excel(path, index=False)
+            i18n.localize_result_df(df).to_excel(path, index=False)
             self._write_parameters(path)
         except Exception as exc:
-            QMessageBox.critical(self, "Export failed", str(exc))
+            QMessageBox.critical(self, i18n.EXPORT_FAILED, str(exc))
             return
-        QMessageBox.information(self, "Exported", f"Saved:\n{path}")
+        QMessageBox.information(self, i18n.EXPORTED, i18n.exported_text(path))
 
     def _write_parameters(self, xlsx_path: str) -> None:
         config = self._config
         w = config.objective
-        txt_path = os.path.splitext(xlsx_path)[0] + "_model_parameters.txt"
-        with open(txt_path, "w") as f:
-            f.write("Objective function parameters:\n")
-            f.write(f"lang_importance = {w.lang_importance}\n")
-            f.write(f"lang_penalty = {w.lang_penalty}\n")
-            f.write(f"nat_sci_1_importance = {w.nat_sci_1_importance}\n")
-            f.write(f"nat_sci_2_importance = {w.nat_sci_2_importance}\n")
-            f.write(f"nat_sci_penalty = {w.nat_sci_penalty}\n")
-            f.write(f"stratification = {w.stratification}\n\n")
-            f.write("Other information:\n")
-            f.write(f"Max class size: {config.max_class_size}\n")
-            f.write(f"Number of classes: {config.num_of_classes}\n")
-            f.write(f"Number of shuffles: {config.shuffles}\n")
-            f.write(f"Time limit per shuffle: {config.time_limit_per_shuffle}s\n")
-            f.write(f"Search workers: {config.num_workers}\n")
-            f.write(f"Best score: {self._result.best_score:.0f}\n")
-            f.write(f"Best science pair: {self._result.best_pair[0]} and {self._result.best_pair[1]}\n")
+        pair = self._result.best_pair
+        txt_path = os.path.splitext(xlsx_path)[0] + "_parametri_modela.txt"
+        with open(txt_path, "w", encoding="utf-8") as f:
+            f.write("Uteži ciljne funkcije:\n")
+            f.write(f"Pomembnost jezika = {w.lang_importance}\n")
+            f.write(f"Kazen za jezik = {w.lang_penalty}\n")
+            f.write(f"Pomembnost naravoslovja 1 = {w.nat_sci_1_importance}\n")
+            f.write(f"Pomembnost naravoslovja 2 = {w.nat_sci_2_importance}\n")
+            f.write(f"Kazen za naravoslovje = {w.nat_sci_penalty}\n")
+            f.write(f"Stratifikacija = {w.stratification}\n\n")
+            f.write("Drugi podatki:\n")
+            f.write(f"Največja velikost razreda: {config.max_class_size}\n")
+            f.write(f"Število razredov: {config.num_of_classes}\n")
+            f.write(f"Število poskusov: {config.shuffles}\n")
+            f.write(f"Časovna omejitev na poskus: {config.time_limit_per_shuffle}s\n")
+            f.write(f"Število niti za iskanje: {config.num_workers}\n")
+            f.write(f"Najboljši rezultat: {self._result.best_score:.0f}\n")
+            f.write(
+                f"Najboljši naravoslovni par: "
+                f"{i18n.subject_to_sl(pair[0])} in {i18n.subject_to_sl(pair[1])}\n"
+            )

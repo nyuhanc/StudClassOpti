@@ -33,9 +33,11 @@ from PySide6.QtWidgets import (
 from studclassopti.core import SolverConfig, load_excel, preprocess, validate
 from studclassopti.core.constraints.registry import validate_constraints
 
+from . import i18n
 from .constraint_panel import ConstraintPanel
 from .results_view import ResultsView
 from .solver_worker import SolverWorker
+from .widgets import info_toggle
 
 
 def _spin(minimum: int, maximum: int, value: int) -> QSpinBox:
@@ -48,7 +50,7 @@ def _spin(minimum: int, maximum: int, value: int) -> QSpinBox:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("StudClassOpti")
+        self.setWindowTitle(i18n.WINDOW_TITLE)
         self.resize(1100, 760)
 
         self._data = None  # preprocessed DataFrame, or None until a file loads
@@ -78,13 +80,26 @@ class MainWindow(QMainWindow):
         self.time_limit = _spin(1, 3600, c.time_limit_per_shuffle)
         self.num_workers = _spin(1, 64, c.num_workers)
 
-        self.general_box = QGroupBox("General")
+        self.general_box = QGroupBox(i18n.GENERAL)
         form = QFormLayout(self.general_box)
-        form.addRow("Number of classes", self.num_classes)
-        form.addRow("Max class size", self.max_class_size)
-        form.addRow("Shuffles", self.shuffles)
-        form.addRow("Time limit per shuffle (s)", self.time_limit)
-        form.addRow("Search workers", self.num_workers)
+        self._add_general_row(form, i18n.NUM_CLASSES, i18n.NUM_CLASSES_DESC, self.num_classes)
+        self._add_general_row(form, i18n.MAX_CLASS_SIZE, i18n.MAX_CLASS_SIZE_DESC, self.max_class_size)
+        self._add_general_row(form, i18n.SHUFFLES, i18n.SHUFFLES_DESC, self.shuffles)
+        self._add_general_row(form, i18n.TIME_LIMIT, i18n.TIME_LIMIT_DESC, self.time_limit)
+        self._add_general_row(form, i18n.SEARCH_WORKERS, i18n.SEARCH_WORKERS_DESC, self.num_workers)
+
+    @staticmethod
+    def _add_general_row(form: QFormLayout, label: str, description: str, field: QWidget) -> None:
+        """A form row whose label carries an ⓘ that expands a description below."""
+        info, desc = info_toggle(description)
+        cell = QWidget()
+        h = QHBoxLayout(cell)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.addWidget(QLabel(label))
+        h.addWidget(info)
+        h.addStretch(1)
+        form.addRow(cell, field)
+        form.addRow(desc)  # spans both columns, just under the field
 
     def _build_objective(self, c: SolverConfig) -> None:
         w = c.objective
@@ -96,17 +111,17 @@ class MainWindow(QMainWindow):
         self.stratification = _spin(0, 10, w.stratification)
 
         # Collapsible: the group's checkbox shows/hides the (advanced) contents.
-        self.objective_box = QGroupBox("Objective weights (advanced)")
+        self.objective_box = QGroupBox(i18n.OBJECTIVE_BOX)
         self.objective_box.setCheckable(True)
         self.objective_box.setChecked(False)
         content = QWidget()
         form = QFormLayout(content)
-        form.addRow("Language importance", self.lang_importance)
-        form.addRow("Language penalty", self.lang_penalty)
-        form.addRow("Science 1 importance", self.ns1_importance)
-        form.addRow("Science 2 importance", self.ns2_importance)
-        form.addRow("Science penalty", self.ns_penalty)
-        form.addRow("Stratification", self.stratification)
+        self._add_general_row(form, i18n.LANG_IMPORTANCE, i18n.LANG_IMPORTANCE_DESC, self.lang_importance)
+        self._add_general_row(form, i18n.LANG_PENALTY, i18n.LANG_PENALTY_DESC, self.lang_penalty)
+        self._add_general_row(form, i18n.NS1_IMPORTANCE, i18n.NS1_IMPORTANCE_DESC, self.ns1_importance)
+        self._add_general_row(form, i18n.NS2_IMPORTANCE, i18n.NS2_IMPORTANCE_DESC, self.ns2_importance)
+        self._add_general_row(form, i18n.NS_PENALTY, i18n.NS_PENALTY_DESC, self.ns_penalty)
+        self._add_general_row(form, i18n.STRATIFICATION, i18n.STRATIFICATION_DESC, self.stratification)
         outer = QVBoxLayout(self.objective_box)
         outer.addWidget(content)
         content.setVisible(False)
@@ -116,17 +131,17 @@ class MainWindow(QMainWindow):
         # File row.
         self.file_edit = QLineEdit()
         self.file_edit.setReadOnly(True)
-        self.file_edit.setPlaceholderText("No spreadsheet loaded")
-        browse = QPushButton("Browse…")
+        self.file_edit.setPlaceholderText(i18n.NO_FILE)
+        browse = QPushButton(i18n.BROWSE)
         browse.clicked.connect(self._browse)
         file_row = QHBoxLayout()
         file_row.addWidget(self.file_edit, 1)
         file_row.addWidget(browse)
 
         # Config save/load row.
-        save_cfg = QPushButton("Save config…")
+        save_cfg = QPushButton(i18n.SAVE_CONFIG_BTN)
         save_cfg.clicked.connect(self._save_config)
-        load_cfg = QPushButton("Load config…")
+        load_cfg = QPushButton(i18n.LOAD_CONFIG_BTN)
         load_cfg.clicked.connect(self._load_config)
         cfg_row = QHBoxLayout()
         cfg_row.addWidget(save_cfg)
@@ -137,7 +152,7 @@ class MainWindow(QMainWindow):
         v.addLayout(file_row)
         v.addLayout(cfg_row)
         v.addWidget(self.general_box)
-        v.addWidget(QLabel("Constraints"))
+        v.addWidget(QLabel(i18n.CONSTRAINTS))
         v.addWidget(self.constraint_panel)
         v.addWidget(self.objective_box)
         v.addStretch(1)
@@ -150,9 +165,9 @@ class MainWindow(QMainWindow):
 
     # ---- right pane (run + results) ----
     def _build_right(self) -> QWidget:
-        self.run_btn = QPushButton("Run")
+        self.run_btn = QPushButton(i18n.RUN)
         self.run_btn.clicked.connect(self._run)
-        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn = QPushButton(i18n.CANCEL)
         self.cancel_btn.setEnabled(False)
         self.cancel_btn.clicked.connect(self._cancel)
         btn_row = QHBoxLayout()
@@ -204,26 +219,27 @@ class MainWindow(QMainWindow):
         self.constraint_panel.load_from(c)
 
     def _save_config(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "Save config", "config.json", "JSON (*.json)")
+        path, _ = QFileDialog.getSaveFileName(self, i18n.SAVE_CONFIG_TITLE, "config.json", "JSON (*.json)")
         if path:
             self._build_config().to_json(path)
 
     def _load_config(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Load config", "", "JSON (*.json)")
+        path, _ = QFileDialog.getOpenFileName(self, i18n.LOAD_CONFIG_TITLE, "", "JSON (*.json)")
         if path:
             self._apply_config_to_widgets(SolverConfig.from_json(path))
             self._revalidate()
 
     # ---- file load + validation ----
     def _browse(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Open spreadsheet", "", "Excel (*.xlsx)")
+        path, _ = QFileDialog.getOpenFileName(self, i18n.OPEN_SPREADSHEET_TITLE, "", "Excel (*.xlsx)")
         if not path:
             return
         try:
-            self._data = preprocess(load_excel(path), self._build_config())
+            raw = i18n.excel_to_internal(load_excel(path))  # Slovene headers -> internal names
+            self._data = preprocess(raw, self._build_config())
         except Exception as exc:
             self._data = None
-            self.status.setText(f"Could not read file: {exc}")
+            self.status.setText(i18n.could_not_read(exc))
             self._refresh_run_enabled()
             return
         self.file_edit.setText(path)
@@ -239,11 +255,11 @@ class MainWindow(QMainWindow):
         config = self._build_config()
         errors = validate(self._data, config) + validate_constraints(self._data, config)
         if errors:
-            shown = "\n".join(f"  • {e}" for e in errors[:10])
-            more = f"\n  …and {len(errors) - 10} more" if len(errors) > 10 else ""
-            self.status.setText(f"{len(errors)} data error(s) — fix before running:\n{shown}{more}")
+            shown = "\n".join(f"  • {i18n.localize_errors(str(e))}" for e in errors[:10])
+            more = i18n.and_more(len(errors) - 10) if len(errors) > 10 else ""
+            self.status.setText(f"{i18n.data_errors_header(len(errors))}\n{shown}{more}")
         else:
-            self.status.setText("Data OK. Ready to run.")
+            self.status.setText(i18n.DATA_OK)
         self._refresh_run_enabled(errors)
         return errors
 
@@ -261,7 +277,7 @@ class MainWindow(QMainWindow):
         config = self._build_config()
         self.progress.setRange(0, config.shuffles)
         self.progress.setValue(0)
-        self.status.setText("Running…")
+        self.status.setText(i18n.RUNNING)
 
         self._worker = SolverWorker(self._data, config)
         self._run_config = config
@@ -276,26 +292,22 @@ class MainWindow(QMainWindow):
         if self._worker is not None:
             self._worker.cancel()
             self.cancel_btn.setEnabled(False)
-            self.status.setText("Cancelling after the current shuffle…")
+            self.status.setText(i18n.CANCELLING)
 
     def _on_progress(self, p) -> None:
         self.progress.setValue(p.shuffle)
-        score = f"{p.score:.0f}" if p.score is not None else "no solution"
-        self.status.setText(
-            f"Shuffle {p.shuffle}/{p.total_shuffles}: {p.status}, "
-            f"score={score}, best={p.best_score:.0f}"
-        )
+        self.status.setText(i18n.progress_text(p))
 
     def _on_finished(self, result) -> None:
         self.results.show_result(result, self._run_config, self._base_name)
         if result.found:
-            self.status.setText(f"Done. Best score {result.best_score:.0f}.")
+            self.status.setText(i18n.done_best(result.best_score))
         else:
-            self.status.setText("Done. No feasible solution found.")
+            self.status.setText(i18n.DONE_INFEASIBLE)
         self._teardown_worker()
 
     def _on_failed(self, message: str) -> None:
-        self.status.setText(f"Solver error: {message}")
+        self.status.setText(i18n.solver_error(message))
         self._teardown_worker()
 
     def _teardown_worker(self) -> None:
