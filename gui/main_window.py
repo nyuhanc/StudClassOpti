@@ -30,8 +30,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from studclassopti.core import SolverConfig, load_excel, preprocess, validate
-from studclassopti.core.constraints.registry import validate_constraints
+from opti.core import SolverConfig, load_excel, preprocess, validate
+from opti.core.constraints.registry import validate_constraints
 
 from . import i18n
 from .constraint_panel import ConstraintPanel
@@ -224,10 +224,18 @@ class MainWindow(QMainWindow):
             self._build_config().to_json(path)
 
     def _load_config(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, i18n.LOAD_CONFIG_TITLE, "", "JSON (*.json)")
-        if path:
-            self._apply_config_to_widgets(SolverConfig.from_json(path))
-            self._revalidate()
+        path, _ = QFileDialog.getOpenFileName(
+            self, i18n.LOAD_CONFIG_TITLE, "", i18n.LOAD_CONFIG_FILTER
+        )
+        if not path:
+            return
+        if path.lower().endswith(".txt"):
+            with open(path, encoding="utf-8") as f:
+                config = i18n.config_from_report(f.read())
+        else:
+            config = SolverConfig.from_json(path)
+        self._apply_config_to_widgets(config)
+        self._revalidate()
 
     # ---- file load + validation ----
     def _browse(self) -> None:

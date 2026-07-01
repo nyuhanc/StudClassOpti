@@ -14,7 +14,7 @@ import os
 
 import pytest
 
-from studclassopti.core import (
+from opti.core import (
     SolverConfig,
     load_excel,
     preprocess,
@@ -22,15 +22,19 @@ from studclassopti.core import (
     best_nat_sci_pair,
     solve,
 )
-from studclassopti.core.constraints.registry import REGISTRY, enabled_constraints
+from opti.core.constraints.registry import REGISTRY, enabled_constraints, validate_constraints
 
-EXCEL = os.path.join(os.path.dirname(__file__), "..", "students_list_2025.xlsx")
+# The Slovene spreadsheet is the real input; translate its headers to the English
+# names core uses via the same bridge the GUI applies on load.
+from gui.i18n import excel_to_internal
+
+EXCEL = os.path.join(os.path.dirname(__file__), "..", "dijaki_2025.xlsx")
 
 
 @pytest.fixture(scope="module")
 def data():
     config = SolverConfig()
-    return preprocess(load_excel(EXCEL), config)
+    return preprocess(excel_to_internal(load_excel(EXCEL)), config)
 
 
 def test_config_json_roundtrip(tmp_path):
@@ -59,6 +63,21 @@ def test_validation_flags_bad_permutation(data):
     bad.loc[bad.index[0], "French"] = bad.loc[bad.index[0], "Italian"]
     errors = validate(bad, config)
     assert any("language priorities" in str(e) for e in errors)
+
+
+def test_male_split_gender_matching_is_case_insensitive(data):
+    """Token 'm' matches 'M'/'Ž' data; only a genuine mismatch is flagged."""
+    config = SolverConfig()  # male split on, token 'm'
+    upper = data.copy()
+    upper["Gender"] = upper["Gender"].str.upper()  # 'M'/'Ž'
+    # Case difference alone must NOT error and must NOT silently ignore males.
+    assert not any("gender" in str(e) for e in validate_constraints(upper, config))
+    males = upper[upper["Gender"].str.lower() == "m"]["Student"].tolist()
+    assert males, "test data should contain males"
+
+    # A token matching nobody (even case-insensitively) is still flagged.
+    config.constraints.male_gender_value = "x"
+    assert any("no student has gender 'x'" in str(e) for e in validate_constraints(upper, config))
 
 
 def test_best_pair_is_a_valid_pair(data):
@@ -138,3 +157,69 @@ def test_solve_quick_feasible_and_constraints_hold(data):
     # Constraint 14: students whose top language is Spanish never get Italian.
     top_spanish = out["Spanish"] == 1
     assert (out.loc[top_spanish, "Language"] != "Italian").all()
+
+
+def test_join_language_class_gathers_one_class(data):
+    """Constraint 15 (off by default): all French students land in one class."""
+    config = SolverConfig()
+    config.shuffles = 1
+    config.time_limit_per_shuffle = 25
+    config.num_workers = 4
+    config.random_seed = 0
+    config.constraints.join_language_class_enabled = True
+    config.constraints.join_language = "French"
+
+    result = solve(data, config)
+    assert result.found, "expected a feasible solution"
+
+    french = result.best_data[result.best_data["Language"] == "French"]
+    # All French students share a single class...
+    assert french["Class"].nunique() <= 1
+    # ...and therefore fit within one class's capacity.
+    assert len(french) <= config.max_class_size
+
+
+def test_join_subject_class_gathers_one_class(data):
+    """Constraint 16 (off by default): all Physics takers land in one class."""
+    config = SolverConfig()
+    config.shuffles = 1
+    config.time_limit_per_shuffle = 25
+    config.num_workers = 4
+    config.random_seed = 0
+    config.constraints.join_subject_class_enabled = True
+    config.constraints.join_subject = "Physics"
+
+    result = solve(data, config)
+    assert result.found, "expected a feasible solution"
+
+    out = result.best_data
+    takes_physics = (out["NatSci1"] == "Physics") | (out["NatSci2"] == "Physics")
+    physics = out[takes_physics]
+    # Everyone taking Physics (in either slot) shares a single class...
+    assert physics["Class"].nunique() <= 1
+    # ...and therefore fits within one class's capacity.
+    assert takes_physics.sum() <= config.max_class_size
+
+
+def test_special_needs_split_distributes_pp(data):
+    """Constraint 17 (off by default): PP students spread across N classes."""
+    config = SolverConfig()
+    config.shuffles = 1
+    config.time_limit_per_shuffle = 25
+    config.num_workers = 4
+    config.random_seed = 0
+    config.constraints.pp_split_enabled = True
+    config.constraints.pp_classes = 2
+    config.constraints.pp_min_per_class = 1
+    config.constraints.pp_max_per_class = 4
+
+    result = solve(data, config)
+    assert result.found, "expected a feasible solution"
+
+    out = result.best_data
+    per_class = out[out["PP"] == 1]["Class"].value_counts()
+    # PP students occupy exactly pp_classes classes...
+    assert len(per_class) == config.constraints.pp_classes
+    # ...each within the configured min..max bounds.
+    assert per_class.min() >= config.constraints.pp_min_per_class
+    assert per_class.max() <= config.constraints.pp_max_per_class

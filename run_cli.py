@@ -1,5 +1,5 @@
 """Command-line front end that reproduces the behaviour of main_CP_v2.py
-using the refactored ``studclassopti.core`` package.
+using the refactored ``opti.core`` package.
 
 This exists to de-risk Phase 1: it lets us confirm the extracted core produces
 the same kind of result as the original script before any GUI is built. All the
@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 import os
 
-from studclassopti.core import (
+from opti.core import (
     SolverConfig,
     load_excel,
     preprocess,
@@ -22,7 +22,7 @@ from studclassopti.core import (
     best_nat_sci_pair,
     solve,
 )
-from studclassopti.core.solver import SolveProgress
+from opti.core.solver import SolveProgress
 
 
 def _print_progress(p: SolveProgress) -> None:
@@ -94,7 +94,7 @@ def main() -> int:
     best.to_excel(os.path.join(out_dir, f"{base}_{results_name}.xlsx"), index=False)
 
     w = config.objective
-    with open(os.path.join(out_dir, f"{base}_{results_name}_model_parameters.txt"), "w") as f:
+    with open(os.path.join(out_dir, f"{base}_{results_name}_model_parameters.txt"), "w", encoding="utf-8") as f:
         f.write("Objective function parameters:\n")
         f.write(f"lang_importance = {w.lang_importance}\n")
         f.write(f"lang_penalty = {w.lang_penalty}\n")

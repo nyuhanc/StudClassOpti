@@ -115,6 +115,26 @@ class ConstraintsConfig:
     exclusion_top_language: str = "Spanish"
     excluded_language: str = "Italian"
 
+    # 15. Everyone assigned `join_language` is gathered into one class (which
+    #     caps that language at max_class_size students). Off by default: it is
+    #     a strong rule that can make the problem infeasible.
+    join_language_class_enabled: bool = False
+    join_language: str = "French"
+
+    # 16. Everyone taking `join_subject` (in either science slot) is gathered
+    #     into one class (which caps that subject at max_class_size students).
+    #     Off by default: a strong rule that can make the problem infeasible.
+    join_subject_class_enabled: bool = False
+    join_subject: str = "Biology"
+
+    # 17. Special-needs students (spreadsheet column PP == 1) split into exactly
+    #     N classes, each holding min..max of them; the rest hold none. Mirrors
+    #     the male split (8). Off by default; no-ops if the PP column is absent.
+    pp_split_enabled: bool = False
+    pp_classes: int = 2
+    pp_min_per_class: int = 1
+    pp_max_per_class: int = 3
+
 
 @dataclass
 class SolverConfig:

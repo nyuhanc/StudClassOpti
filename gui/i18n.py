@@ -13,6 +13,8 @@ This module is the single place that bridges the two:
 
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 
 # ---- column names: English (internal) -> Slovene (spreadsheet + display) ----
@@ -48,9 +50,17 @@ _ALL_EN_SL = {**COLUMNS_EN_SL, **SUBJECTS_EN_SL}
 _SL_TO_EN = {sl: en for en, sl in _ALL_EN_SL.items()}
 
 
+_SUBJECTS_SL_TO_EN = {sl: en for en, sl in SUBJECTS_EN_SL.items()}
+
+
 def subject_to_sl(name: str) -> str:
     """Slovene display name for a language/science (passthrough if unknown)."""
     return SUBJECTS_EN_SL.get(name, name)
+
+
+def subject_to_en(name: str) -> str:
+    """Internal English name for a Slovene language/science (passthrough if unknown)."""
+    return _SUBJECTS_SL_TO_EN.get(name, name)
 
 
 def col_to_sl(name: str) -> str:
@@ -186,6 +196,36 @@ CONSTRAINTS_SL: dict[str, dict] = {
             "excluded_language": "Izključeni jezik",
         },
     },
+    "c15": {
+        "label": "Združi jezik v razred",
+        "description": (
+            "Vsi dijaki z izbranim jezikom so razvrščeni v en skupni razred. To pomeni, da "
+            "število dijakov s tem jezikom ne sme presegati največje velikosti razreda."
+        ),
+        "params": {"join_language": "Jezik"},
+    },
+    "c16": {
+        "label": "Združi naravoslovni predmet v razred",
+        "description": (
+            "Vsi dijaki, ki imajo izbrani naravoslovni predmet (v katerem koli od obeh mest), "
+            "so razvrščeni v en skupni razred. To pomeni, da število dijakov s tem predmetom "
+            "ne sme presegati največje velikosti razreda."
+        ),
+        "params": {"join_subject": "Predmet"},
+    },
+    "c17": {
+        "label": "Porazdeli dijake s posebnimi potrebami",
+        "description": (
+            "Dijaki s posebnimi potrebami (stolpec PP = 1) so zbrani v točno toliko razredov, "
+            "kot je nastavljeno; vsak tak razred vsebuje med najmanj in največ takih dijakov, "
+            "ostali razredi nobenega."
+        ),
+        "params": {
+            "pp_classes": "Število razredov z dijaki s PP",
+            "pp_min_per_class": "Najmanj dijakov s PP na tak razred",
+            "pp_max_per_class": "Največ dijakov s PP na tak razred",
+        },
+    },
 }
 
 
@@ -201,6 +241,120 @@ def param_label(cid: str, key: str, fallback: str) -> str:
     return CONSTRAINTS_SL[cid]["params"].get(key, fallback)
 
 
+# ---- model-parameters report: labels shared by the writer and the loader ----
+# results_view._write_parameters emits these; config_from_report parses them back.
+# Keeping the maps here (single source of truth) keeps writer and loader in sync.
+PARAM_OBJECTIVE_HEADER = "Uteži ciljne funkcije:"
+PARAM_CONSTRAINTS_HEADER = "Omejitve:"
+PARAM_OTHER_HEADER = "Drugi podatki:"
+
+# objective-weight label -> ObjectiveWeights field
+PARAM_OBJECTIVE = {
+    "Pomembnost jezika": "lang_importance",
+    "Kazen za jezik": "lang_penalty",
+    "Pomembnost naravoslovja 1": "nat_sci_1_importance",
+    "Pomembnost naravoslovja 2": "nat_sci_2_importance",
+    "Kazen za naravoslovje": "nat_sci_penalty",
+    "Stratifikacija": "stratification",
+}
+
+# "Drugi podatki" label -> SolverConfig field (result lines are ignored on load)
+PARAM_GENERAL = {
+    "Največja velikost razreda": "max_class_size",
+    "Število razredov": "num_of_classes",
+    "Število poskusov": "shuffles",
+    "Časovna omejitev na poskus": "time_limit_per_shuffle",
+    "Število niti za iskanje": "num_workers",
+}
+
+
+def _leading_int(text: str) -> int:
+    """First integer in a value string ('120s' -> 120)."""
+    return int(re.search(r"-?\d+", text).group())
+
+
+def config_from_report(text: str):
+    """Reconstruct a SolverConfig from a ``_parametri_modela.txt`` report.
+
+    Tolerant by design: only settings are restored; unrecognised lines (e.g. the
+    result score and best pair) are ignored. The label maps are the same ones the
+    writer uses, so the two stay in sync.
+    """
+    from opti.core import SolverConfig
+    from opti.core.constraints.registry import REGISTRY
+
+    config = SolverConfig()
+    cons = config.constraints
+    by_id = {c.id: c for c in REGISTRY}
+    label_to_cid = {constraint_label(cid): cid for cid in CONSTRAINTS_SL}
+
+    current_cid = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # Indented lines are parameters of the constraint block we're inside.
+        if line[:1] == " " and current_cid is not None and "=" in stripped:
+            label, _, value = stripped.partition("=")
+            label, value = label.strip(), value.strip()
+            if current_cid == "c06" and label == SCIENCE_PAIR:
+                cons.best_pair = _parse_pair(value)
+            else:
+                key = _param_key_for_label(current_cid, label)
+                if key is not None:
+                    setattr(cons, key, _param_value(by_id[current_cid], key, value))
+            continue
+
+        current_cid = None  # any non-indented line ends the previous block
+
+        if stripped.endswith(":"):  # section header
+            continue
+        if "=" in stripped:  # objective weight: "Label = int"
+            label, _, value = stripped.partition("=")
+            field = PARAM_OBJECTIVE.get(label.strip())
+            if field is not None:
+                setattr(config.objective, field, _leading_int(value))
+            continue
+        if ":" in stripped:  # "Label: value"
+            label, _, value = stripped.partition(":")
+            label, value = label.strip(), value.strip()
+            if value in ("da", "ne") and label in label_to_cid:
+                current_cid = label_to_cid[label]
+                setattr(cons, by_id[current_cid].enabled_field, value == "da")
+            elif label in PARAM_GENERAL:
+                setattr(config, PARAM_GENERAL[label], _leading_int(value))
+    return config
+
+
+def _param_key_for_label(cid: str, label: str):
+    """The config key whose Slovene param label is ``label`` (or None)."""
+    for key, sl in CONSTRAINTS_SL[cid]["params"].items():
+        if sl == label:
+            return key
+    return None
+
+
+def _param_value(constraint, key: str, value: str):
+    """Convert a report's Slovene param value back to its stored form."""
+    param = next(p for p in constraint.parameters if p.key == key)
+    if param.kind == "int":
+        return _leading_int(value)
+    if param.kind == "choice":  # a language / science name
+        return subject_to_en(value)
+    if key == "schoolmate_column":  # a spreadsheet column name
+        return col_to_en(value)
+    return value  # plain str (e.g. the gender token)
+
+
+def _parse_pair(value: str):
+    """'Biologija + Kemija' -> ('Biology', 'Chemistry'); AUTO label -> None."""
+    if value == AUTO_PAIR:
+        return None
+    parts = [subject_to_en(p.strip()) for p in value.split("+")]
+    return tuple(parts) if len(parts) == 2 else None
+
+
 # Constraints not shown in the GUI: always-on rules that are self-evident to a
 # regular user (c04: a student's two sciences must differ). They keep their
 # config default (enabled) since the panel never touches them.
@@ -208,7 +362,7 @@ HIDDEN_CONSTRAINTS = {"c04"}
 
 # Constraints that accept only a single subject/language; marked with a red "*"
 # whose meaning is explained once by SINGLE_CHOICE_FOOTNOTE.
-SINGLE_CHOICE_CONSTRAINTS = {"c09", "c10", "c11", "c12", "c13", "c14"}
+SINGLE_CHOICE_CONSTRAINTS = {"c09", "c10", "c11", "c12", "c13", "c14", "c15", "c16"}
 
 SINGLE_CHOICE_MARK = ' <span style="color:#c00; font-weight:bold;">*</span>'
 SINGLE_CHOICE_FOOTNOTE = (
@@ -270,6 +424,8 @@ SAVE_CONFIG_BTN = "Shrani nastavitve…"
 LOAD_CONFIG_BTN = "Naloži nastavitve…"
 SAVE_CONFIG_TITLE = "Shrani nastavitve"
 LOAD_CONFIG_TITLE = "Naloži nastavitve"
+# Load accepts the JSON config (Shrani nastavitve) or a results parameters report.
+LOAD_CONFIG_FILTER = "Nastavitve (*.json *.txt);;JSON (*.json);;Parametri (*.txt)"
 OPEN_SPREADSHEET_TITLE = "Odpri datoteko"
 CONSTRAINTS = "Omejitve"
 

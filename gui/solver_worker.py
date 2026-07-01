@@ -13,8 +13,8 @@ from __future__ import annotations
 import pandas as pd
 from PySide6.QtCore import QThread, Signal
 
-from studclassopti.core import SolverConfig, solve
-from studclassopti.core.solver import SolveProgress, SolverResult
+from opti.core import SolverConfig, solve
+from opti.core.solver import SolveProgress, SolverResult
 
 
 class SolverWorker(QThread):

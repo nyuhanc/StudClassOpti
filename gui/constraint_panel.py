@@ -24,9 +24,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from studclassopti.core import SolverConfig
-from studclassopti.core.constraints.base import Constraint, Parameter
-from studclassopti.core.constraints.registry import REGISTRY
+from opti.core import SolverConfig
+from opti.core.constraints.base import Constraint, Parameter
+from opti.core.constraints.registry import REGISTRY
 
 from . import i18n
 from .widgets import info_toggle
@@ -130,11 +130,15 @@ class ConstraintPanel(QWidget):
                 self._set_widget(self._params[(c.id, p.key)], value)
 
         if self._best_pair is not None:
-            if cons.best_pair is None:
-                self._best_pair.setCurrentIndex(0)
-            else:
-                idx = self._best_pair.findData(tuple(cons.best_pair))
-                self._best_pair.setCurrentIndex(idx if idx >= 0 else 0)
+            # findData can't match a Python tuple stored as item data, so compare
+            # by value; best_pair is None (AUTO) or a (subject, subject) tuple.
+            target = None if cons.best_pair is None else tuple(cons.best_pair)
+            idx = next(
+                (i for i in range(self._best_pair.count())
+                 if self._best_pair.itemData(i) == target),
+                0,
+            )
+            self._best_pair.setCurrentIndex(idx)
 
     def apply_to(self, config: SolverConfig) -> None:
         cons = config.constraints

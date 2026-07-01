@@ -24,6 +24,9 @@ from .c11_require_subject import RequireSubjectForTopPriority
 from .c12_exclude_subject import ExcludeSubjectForLowPriority
 from .c13_subject_pairing import SubjectPairing
 from .c14_language_exclusion import LanguageExclusion
+from .c15_join_language_class import JoinLanguageClass
+from .c16_join_subject_class import JoinSubjectClass
+from .c17_special_needs_split import SpecialNeedsSplit
 
 REGISTRY: list[Constraint] = [
     ClassSize(),
@@ -39,6 +42,9 @@ REGISTRY: list[Constraint] = [
     ExcludeSubjectForLowPriority(),
     SubjectPairing(),
     LanguageExclusion(),
+    JoinLanguageClass(),
+    JoinSubjectClass(),
+    SpecialNeedsSplit(),
 ]
 
 

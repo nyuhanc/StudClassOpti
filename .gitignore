@@ -5,3 +5,7 @@ __pycache__/
 .venv/
 venv/
 ~$*.xlsx
+
+# PyInstaller build artifacts
+build/
+dist/
