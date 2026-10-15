@@ -1,0 +1,5 @@
+# Build-only dependencies (packaging the desktop app). Not needed at runtime.
+# Install alongside requirements.txt when producing executables:
+#     pip install -r requirements.txt -r requirements-build.txt
+#     pyinstaller opti.spec
+pyinstaller==6.21.0

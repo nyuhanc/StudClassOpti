@@ -1,0 +1,91 @@
+==========================================================================
+ BUILDING THE WINDOWS .EXE  (do all of this ON the Windows machine)
+==========================================================================
+
+Goal: produce dist\opti\opti.exe — a double-click app that runs on any
+Windows 10/11 PC with NOTHING preinstalled.
+
+Note: the .exe MUST be built on Windows. You cannot build it on the Mac
+(PyInstaller does not cross-compile).
+
+
+--------------------------------------------------------------------------
+ 1. FILES TO COPY TO THE WINDOWS MACHINE
+--------------------------------------------------------------------------
+
+Copy the project folder, but DO NOT copy these (Mac-specific / huge):
+    .venv\        build\        dist\        .git\        __pycache__\
+
+Files/folders you DO need:
+    opti\                     (the core package)
+    gui\                      (the PySide6 GUI)
+    app.py                    (app entry point)
+    run_cli.py                (optional command-line version)
+    requirements.txt          (runtime dependencies)
+    requirements-build.txt    (PyInstaller, build-only)
+    opti.spec                 (PyInstaller build recipe)
+    dijaki_2025.xlsx          (example data file)
+
+
+--------------------------------------------------------------------------
+ 2. INSTALL PYTHON (one time)
+--------------------------------------------------------------------------
+
+Download Python 3.9 or newer from:  https://python.org/downloads
+Run the installer and TICK "Add Python to PATH" on the first screen.
+
+
+--------------------------------------------------------------------------
+ 3. OPEN A TERMINAL IN THE PROJECT FOLDER
+--------------------------------------------------------------------------
+
+In File Explorer, open the project folder, click the address bar,
+type:  cmd   and press Enter.
+(This opens Command Prompt already pointed at the folder.)
+
+
+--------------------------------------------------------------------------
+ 4. BUILD — run these four commands one by one
+--------------------------------------------------------------------------
+
+    python -m venv .venv
+    .venv\Scripts\python -m pip install --upgrade pip
+    .venv\Scripts\python -m pip install -r requirements.txt -r requirements-build.txt
+    .venv\Scripts\pyinstaller opti.spec
+
+The last command takes a few minutes (it bundles Python + Qt + OR-Tools).
+
+
+--------------------------------------------------------------------------
+ 5. RESULT
+--------------------------------------------------------------------------
+
+The app is at:    dist\opti\opti.exe
+Double-click it to run.
+
+
+--------------------------------------------------------------------------
+ 6. GIVING IT TO OTHER PEOPLE
+--------------------------------------------------------------------------
+
+ZIP THE WHOLE  dist\opti\  FOLDER and send that.
+opti.exe needs the "_internal" folder sitting next to it, so the .exe
+alone is not enough.
+
+The recipient needs NOTHING installed — they unzip and double-click.
+Runs on any normal 64-bit Windows 10/11 PC.
+
+
+--------------------------------------------------------------------------
+ THINGS TO EXPECT
+--------------------------------------------------------------------------
+
+* SmartScreen warning on first run on each new machine:
+  "Windows protected your PC"  ->  click "More info"  ->  "Run anyway".
+  This is normal for an unsigned app and is a one-click dismiss.
+
+* If "python" is not recognized in step 4, the "Add to PATH" box was
+  missed during install — reinstall Python and tick it (or reboot).
+
+* If the build fails, copy the last ~20 lines of output and send them.
+==========================================================================

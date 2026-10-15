@@ -1,0 +1,45 @@
+name: Build desktop app
+
+# Windows is the primary target; macOS is built in parallel as a mirror.
+# Run manually from the Actions tab (workflow_dispatch), or automatically when
+# a version tag (v*) is pushed.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-build.txt
+
+      - name: Run smoke tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
+
+      - name: Build bundle
+        run: pyinstaller opti.spec --noconfirm
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: opti-${{ matrix.os }}
+          path: dist/opti
+          if-no-files-found: error
